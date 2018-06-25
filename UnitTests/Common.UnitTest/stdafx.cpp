@@ -4,5 +4,5 @@
 
 #include "stdafx.h"
 
-// TODO: reference any additional headers you need in STDAFX.H
-// and not in this file
+const double maxDiff = 1e-6;
+const double maxDiffSq = 1e-12;

@@ -4,3 +4,7 @@
 #include "CppUnitTest.h"
 
 #include <cassert>
+
+extern const double maxDiff;
+extern const double maxDiffSq;
+

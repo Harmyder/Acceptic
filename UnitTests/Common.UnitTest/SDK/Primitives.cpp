@@ -10,8 +10,6 @@ namespace CommonTest
 {
     TEST_CLASS(Primitives_Test)
     {
-        double maxDiff = 1e-6;
-
         void TestIntersection(const Line<double>& l1, const Line<double>& l2, Point2<double> expected) {
             const auto actual = Intersection(l1, l2, maxDiff);
             if (expected.x == std::numeric_limits<double>::infinity() && expected.y == std::numeric_limits<double>::infinity()) {

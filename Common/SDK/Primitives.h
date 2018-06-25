@@ -39,26 +39,26 @@ namespace Common {
 
         template <class T>
         bool IsPlaneCover(const HalfPlane<T>& a, const HalfPlane<T>& b, const HalfPlane<T>& c, T maxDiff) {
-            const auto checkParallel = [](const Point2<T>& p, const HalfPlane<T>& hp1, const HalfPlane<T>& hp2) {
+            const auto isParallelCover = [](const Point2<T>& p, const HalfPlane<T>& hp1, const HalfPlane<T>& hp2) {
                 if (p.IsInfinite()) {
                     const T d = Dot(hp1.GetNormal(), hp2.GetNormal());
                     const bool codirected = d > 0;
                     if (!codirected) {
                         return true;
                     }
-                    return false;
                 }
+                return false;
             };
-            const auto gamma  = Intersection(a.hp, b.hp, maxDiff);
-            if (checkParallel(gamma, a, b)) {
+            const auto gamma  = Intersection(a.boundary, b.boundary, maxDiff);
+            if (isParallelCover(gamma, a, b)) {
                 return true;
             }
-            const auto alpha = Intersection(b.hp, c.hp, maxDiff);
-            if (checkParallel(alpha, b, c)) {
+            const auto alpha = Intersection(b.boundary, c.boundary, maxDiff);
+            if (isParallelCover(alpha, b, c)) {
                 return true;
             }
-            const auto beta  = Intersection(c.hp, a.hp, maxDiff);
-            if (checkParallel(beta, c, a)) {
+            const auto beta  = Intersection(c.boundary, a.boundary, maxDiff);
+            if (isParallelCover(beta, c, a)) {
                 return true;
             }
             const bool gammaOk = c.IsInside(gamma, maxDiff);

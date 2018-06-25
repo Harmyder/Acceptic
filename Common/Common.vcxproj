@@ -65,6 +65,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>.;</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -83,6 +84,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>.;</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -92,15 +94,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Optimization\lp.h" />
-    <ClInclude Include="Optimization\Megiddo\Megiddo.h" />
+    <ClInclude Include="Container\Dynarray.h" />
+    <ClInclude Include="DebugPrint.h" />
+    <ClInclude Include="Geometry\Dcel\Face.h" />
+    <ClInclude Include="Geometry\Dcel\HalfEdge.h" />
+    <ClInclude Include="Geometry\Dcel\Mesh.h" />
+    <ClInclude Include="Geometry\Dcel\Tools.h" />
+    <ClInclude Include="Geometry\Dcel\Traits.h" />
+    <ClInclude Include="Geometry\Dcel\Vertex.h" />
+    <ClInclude Include="Optimization\Lp\IncrementalLp.h" />
+    <ClInclude Include="SDK\Hashes.h" />
     <ClInclude Include="SDK\Primitives.h" />
     <ClInclude Include="SDK\Types.h" />
     <ClInclude Include="SDK\Utility.h" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Optimization\Megiddo\Megiddo.cpp" />
+    <ClCompile Include="Optimization\Lp\IncrementalLp.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>

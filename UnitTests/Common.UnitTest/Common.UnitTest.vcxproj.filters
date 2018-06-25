@@ -32,5 +32,8 @@
     <ClCompile Include="SDK\Utility.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Optimization\Lp\IncrementalLp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

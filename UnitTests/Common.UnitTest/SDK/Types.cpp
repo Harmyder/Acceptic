@@ -11,8 +11,6 @@ namespace CommonTest
 {
     TEST_CLASS(Types_Test)
     {
-        double maxDiff = 1e-6;
-
         template <class T, int Dim>
         void TestHpProjection(const HyperPlane<T, Dim>& hp, const Point<T, Dim>& p2p, const Point<T, Dim> expectedProj) {
             const auto actualProj = hp.Project(p2p, maxDiff);
@@ -83,6 +81,25 @@ namespace CommonTest
             const bool insideFlip = hp.IsInside(x, maxDiff);
             Assert::IsFalse(inside);
             Assert::IsTrue(insideFlip);
+        }
+
+        TEST_METHOD(CreateCrossProdMatrixXYZ) {
+            Point3<double> x(kXUnit);
+            Point3<double> y(kYUnit);
+            const auto m = CreateCrossProdMatrix(x);
+            const auto actual = m * y;
+            const auto expected = Cross(x, y);
+            const double d = (actual - expected).LenSq();
+            Assert::IsTrue(AlmostEqualToZero(d, maxDiffSq));
+        }
+
+        TEST_METHOD(RotationBetweenXY) {
+            Point3<double> x(kXUnit);
+            Point3<double> y(kYUnit);
+            const auto m = RotationBetween(x, y, maxDiffSq);
+            const auto actual = m * x;
+            const double d = (actual - y).LenSq();
+            Assert::IsTrue(AlmostEqualToZero(d, maxDiffSq));
         }
     };
 }
