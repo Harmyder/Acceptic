@@ -1,63 +1,107 @@
 #include "stdafx.h"
 #include "Casting.h"
 
-#include "Common/Geometry/Dcel/Mesh.h"
+#include "Common/Geometry/Dcel/Tools.h"
 #include "Common/SDK/Utility.h"
+#include "Common/Optimization/Lp/IncrementalLp.h"
+#include "Common/DebugPrint.h"
 
 using namespace Common;
 using namespace std;
 
-template <class T>
-SDK::Plane<T> PlaneFrom2VectorsAndPoint(const SDK::Point3<T>& v1, const SDK::Point3<T>& v2, const SDK::Point3<T>& p) {
-    const auto normal = Cross(v1, v2);
-    const auto d = Dot(normal, p);
-    const SDK::Plane<T> res(normal, d);
-    return res;
-}
-
-auto PlaneFromFace(const Dcel::Mesh<int>& m, vector<SDK::Point3<double>> verticesObj, int faceId) {
-    const int edgeId = m.Faces()[faceId].GetEdge();
-    const auto& eA = m.Halfedges()[edgeId];
-    const auto& eB = m.Halfedges()[eA.GetNext()];
-    const auto& eBTwin = m.Halfedges()[m.GetTwinId(eA.GetNext())];
-    const auto& vA = verticesObj[eA.GetOrigin()];
-    const auto& vB = verticesObj[eB.GetOrigin()];
-    const auto& vC = verticesObj[eBTwin.GetOrigin()];
-    const auto plane = PlaneFrom2VectorsAndPoint(vB - vA, vC - vB, vA);
-    return plane;
-}
-
-// Combine faces into bigger faces if their are adjacent and normals are the same
-// ___platoA___     ___platoB___
-// |          |_____|          |
-// |___________________________|
-// platoA and platoB will be different big faces though they are the same for casting purposes
-vector<SDK::Plane<double>> CombineFaces(const Dcel::Mesh<int>& m, vector<SDK::Point3<double>> verticesObj) {
-    vector<SDK::Plane<double>> bigFaces;
-    vector<bool> visited(m.Faces().size());
-    int curr = -1;
-    while (curr < (int)m.Faces().size()) {
-        while (visited[++curr]);
-        visited[curr] = true;
-        bigFaces.emplace_back(PlaneFromFace(m, verticesObj, curr));
-        const auto reference = SDK::Normalize(bigFaces.back().GetNormal());
-        auto handleFace = [&visited, &m, &reference, &verticesObj](int faceId) {
-            if (!visited[faceId]) {
-                const auto normal = SDK::Normalize(PlaneFromFace(m, verticesObj, faceId).GetNormal());
-                if (SDK::AlmostEqualToZero((normal - reference).LenSq(), maxDiffSq)) {
-                    visited[faceId] = true;
-                }
-            }
-        };
+namespace
+{
+    template <class T>
+    SDK::Plane<T> PlaneFrom2VectorsAndPoint(const SDK::Point3<T>& v1, const SDK::Point3<T>& v2, const SDK::Point3<T>& p) {
+        const auto normal = Cross(v1, v2);
+        const auto d = Dot(normal, p);
+        const SDK::Plane<T> res(normal, d);
+        return res;
     }
-    return bigFaces;
+
+    auto PlaneFromFace(const Dcel::Mesh<int>& m, vector<SDK::Point3<double>> verticesObj, int faceId) {
+        const int edgeId = m.Faces()[faceId].GetEdge();
+        const auto& eA = m.Halfedges()[edgeId];
+        const auto& eB = m.Halfedges()[eA.GetNext()];
+        const auto& eBTwin = m.Halfedges()[m.GetTwinId(eA.GetNext())];
+        const auto& vA = verticesObj[eA.GetOrigin()];
+        const auto& vB = verticesObj[eB.GetOrigin()];
+        const auto& vC = verticesObj[eBTwin.GetOrigin()];
+        const auto plane = PlaneFrom2VectorsAndPoint(vB - vA, vC - vB, vA);
+        return plane;
+    }
 }
 
-//std::array<Common::SDK::Plane<double>, 3> FindCoverForHemisphere(
-//    const std::vector<Common::SDK::Plane<double>>& faces,
-//    const Common::SDK::Point3<double>& hemi
-//) {
-//    (void)hemi;
-//    (void)faces;
-//    return {};
-//}
+namespace Casting
+{
+    // Combine faces into bigger faces if their are adjacent and normals are the same
+    // ___platoA___     ___platoB___
+    // |          |_____|          |
+    // |___________________________|
+    // platoA and platoB will be different big faces though they are the same for casting purposes
+    vector<SDK::Plane<double>> CombineFaces(const Dcel::Mesh<int>& m, vector<SDK::Point3<double>> verticesObj) {
+        vector<SDK::Plane<double>> bigFaces;
+        vector<bool> visited(m.Faces().size());
+        int curr = -1;
+        const int facesCount = (int)m.Faces().size();
+        while (++curr < facesCount) {
+            if (visited[curr]) {
+                continue;
+            }
+            visited[curr] = true;
+            bigFaces.emplace_back(PlaneFromFace(m, verticesObj, curr));
+            const auto reference = SDK::Normalize(bigFaces.back().GetNormal());
+            auto handleFace = [&visited, &m, &reference, &verticesObj](int faceId) {
+                if (!visited[faceId]) {
+                    const auto normal = SDK::Normalize(PlaneFromFace(m, verticesObj, faceId).GetNormal());
+                    if (SDK::AlmostEqualToZero((normal - reference).LenSq(), kMaxDiffSq)) {
+                        visited[faceId] = true;
+                    }
+                }
+            };
+            Dcel::VisitNeighbouringFaces(m, curr, handleFace);
+        }
+        return bigFaces;
+    }
+
+    SDK::HalfPlane<double> ProjectIntersectionOnUpperHemispherePlane(SDK::Point3<double> hemisphereDirection) {
+        const auto inplaneNormal = Normalize(SDK::Point2<double>(hemisphereDirection.x, hemisphereDirection.y));
+        const double distanceToOrigin = hemisphereDirection.z;
+        SDK::Point2<double> pointOnLine = -inplaneNormal * distanceToOrigin;
+        const double freeTerm = Dot(pointOnLine, inplaneNormal);
+        SDK::Line<double> boundary(inplaneNormal, freeTerm);
+        SDK::HalfPlane<double> hp(boundary);
+        return hp;
+    }
+
+    array<int, kCandidatesPerHemisphere> FindCover(const vector<SDK::HalfPlane<double>>& matrix) {
+        for (const auto& hp : matrix) {
+            DebugPrintf("normal = (%f, %f)\n", hp.boundary.a, hp.boundary.b);
+            DebugPrintf("y = %f*x + (%f)\n", -hp.boundary.a / hp.boundary.b, hp.boundary.c / hp.boundary.b);
+            DebugPrintf("\n");
+        }
+        SDK::Point2<double> c(1., 1.);
+        const auto p2 = Optimization::solveMax(-c, matrix, { -kBound, kBound }, { -kBound, kBound }, kMaxDiff);
+        assert(std::abs(p2.value().point.x) != kBound && std::abs(p2.value().point.y) != kBound);
+        const auto p1 = Optimization::solveMax(c, matrix, { -kBound, kBound }, { -kBound, kBound }, kMaxDiff);
+        assert(std::abs(p1.value().point.x) != kBound && std::abs(p1.value().point.y) != kBound);
+
+        vector<int> tights{
+            p1.value().formingHalfPlanes.first, p1.value().formingHalfPlanes.second,
+            p2.value().formingHalfPlanes.first, p2.value().formingHalfPlanes.second
+        };
+        sort(tights.begin(), tights.end());
+        tights.erase(unique(tights.begin(), tights.end()), tights.end());
+
+        if (tights.size() == 3) {
+            return { tights[0], tights[1], tights[2] };
+        }
+
+        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff)) return { 0,1,2 };
+        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[3]], kMaxDiff)) return { 0,1,3 };
+        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { 0,2,3 };
+        if (SDK::IsPlaneCover(matrix[tights[1]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { 1,2,3 };
+
+        throw logic_error("");
+    }
+}

@@ -11,13 +11,13 @@ namespace CommonTest
     TEST_CLASS(Primitives_Test)
     {
         void TestIntersection(const Line<double>& l1, const Line<double>& l2, Point2<double> expected) {
-            const auto actual = Intersection(l1, l2, maxDiff);
+            const auto actual = Intersection(l1, l2, kMaxDiff);
             if (expected.x == std::numeric_limits<double>::infinity() && expected.y == std::numeric_limits<double>::infinity()) {
                 Assert::IsTrue(actual.x == std::numeric_limits<double>::infinity() && actual.y == std::numeric_limits<double>::infinity());
             }
             else {
                 const auto dist = (actual - expected).Len();
-                Assert::IsTrue(AlmostEqualToZero(dist, maxDiff));
+                Assert::IsTrue(AlmostEqualToZero(dist, kMaxDiff));
             }
         }
 
@@ -25,7 +25,7 @@ namespace CommonTest
             const HalfPlane<double> hp1(l1, flip1);
             const HalfPlane<double> hp2(l2, flip2);
             const HalfPlane<double> hp3(l3, flip3);
-            const bool isCover = IsPlaneCover(hp1, hp2, hp3, maxDiff);
+            const bool isCover = IsPlaneCover(hp1, hp2, hp3, kMaxDiff);
             Assert::IsTrue(expected == isCover);
         }
 

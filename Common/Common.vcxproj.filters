@@ -65,5 +65,11 @@
     <ClCompile Include="Optimization\Lp\IncrementalLp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DebugPrint.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="Visualizers.natvis" />
   </ItemGroup>
 </Project>

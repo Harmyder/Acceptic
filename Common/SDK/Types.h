@@ -197,7 +197,7 @@ namespace Common {
 
         template <class T>
         Matrix<T, 3> CreateCrossProdMatrix(const Point3<T>& p) {
-            Matrix<T, 3> res(0, -p.z, -p.y, p.z, 0, -p.x, -p.y, p.x, 0);
+            Matrix<T, 3> res(0, -p.z, p.y, p.z, 0, -p.x, -p.y, p.x, 0);
             return res;
         }
 
@@ -225,6 +225,7 @@ namespace Common {
         struct HyperPlane<T, 2> {
             // a*x + b*y = c
             HyperPlane(T a, T b, T c) : a(a), b(b), c(c) {}
+            HyperPlane(Point2<T> p, T c) : HyperPlane(p.x, p.y, c) {}
 
             using value_type = T;
             union {

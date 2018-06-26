@@ -38,8 +38,11 @@ namespace Common
             const Id startId = face.GetEdge();
             Id currId = startId;
             do {
-                func(m.Halfedges()[m.GetTwinId(currId)].GetFace());
-                currId = m.Halfedges[currId].GetNext();
+                const auto& edge = m.Halfedges()[m.GetTwinId(currId)];
+                if (edge.GetNext() != Traits<Id>::kNoIndex) {
+                    func(edge.GetFace());
+                }
+                currId = m.Halfedges()[currId].GetNext();
             } while (currId != startId);
         }
 
@@ -145,7 +148,7 @@ namespace Common
                 const auto nextEdge = (t * 3 + (i + 1) % 3);
                 mesh.Halfedges()[edgeToDcel[currEdge]].SetNext(edgeToDcel[nextEdge]);
             });            
-            assert(count_if(mesh.Halfedges().cbegin(), mesh.Halfedges().cbegin(), [](const HalfEdge<Id>& he) { return he.GetNext() == Traits<Id>::kNoIndex; }) == (Id)boundaryEdges.size());
+            assert(count_if(mesh.Halfedges().cbegin(), mesh.Halfedges().cend(), [](const HalfEdge<Id>& he) { return he.GetNext() == Traits<Id>::kNoIndex; }) == (Id)boundaryEdges.size());
 
             return mesh;
         }

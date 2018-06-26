@@ -33,10 +33,68 @@ namespace Common {
                 if (v < 0) return -infty;
                 return 0;
             }
+
+            template <class T>
+            SDK::Point2<T> Clamp(SDK::Point2<T> p, T min, T max) {
+                p.x = std::clamp(p.x, min, max);
+                p.y = std::clamp(p.y, min, max);
+                return p;
+            }
         }
 
         template <class T>
-        std::optional<SDK::Point2<T>> solveMax(
+        struct LpTask2dRes {
+            SDK::Point2<T> point;
+            std::pair<int, int> formingHalfPlanes;
+        };
+
+        //template <class T>
+        //struct LpTask2dRes {
+        //    enum { kNoIndex = -1 };
+
+        //    const int kFirstTight = 0;
+        //    const int kSecondTight = 1;
+
+        //    const int kFirstInfeas = 2;
+        //    const int kSecondInfeas = 1;
+        //    const int kThirdInfeas = 0;
+
+        //    LpTask2dRes CreateTightPlanes(int i, int j) {
+        //        get<kFirstTight>(res._formingHalfPlanes) = i;
+        //        get<kSecondTight>(res._formingHalfPlanes) = i;
+        //        _point = p;
+        //    }
+
+        //    LpTask2dRes CreateParallelInfeasibility(int i, int j) {
+        //        get<kFirstInfeas>(res._formingHalfPlanes) = i;
+        //        get<kSecondInfeas>(res._formingHalfPlanes) = j;
+        //        _point = p;
+        //    }
+
+        //    LpTask2dRes CreateTriangularlInfeasibility(Point2<T> p, int i, int j, int k) {
+        //        LpTask2dRes res;
+        //        get<kFirstInfeas>(res._formingHalfPlanes) = i;
+        //        get<kSecondInfeas>(res._formingHalfPlanes) = j;
+        //        get<kThirdInfeas>(res._formingHalfPlanes) = k;
+        //        _point = p;
+        //    }
+
+        //    bool IsFeasible() { return get<0>(_formingHalfPlanes) == kNoIndex && get<2>(_formingHalfPlanes) != kNoIndex; }
+        //    auto GetPoint() const { return point; }
+
+        //    enum class Infeasibility {
+        //        Parallel,
+        //        Triangular,
+        //        None
+        //    };
+        //    Infeasibility GetInfeasibilityType
+        //private:
+        //    SDK::Point2<T> _point;
+        //    std::tuple<int, int, int> _formingHalfPlanes;
+        //};
+
+        template <class T>
+        std::optional<LpTask2dRes<T>> solveMax(
             const SDK::Point2<T>& c,
             const std::vector<SDK::HalfPlane<T>>& matrix, // Right side incorporated
             const std::pair<T, T>& xBounds, // Natural (domain specific bounds) on x
@@ -46,14 +104,14 @@ namespace Common {
             assert(xBounds.second > xBounds.first && yBounds.second > xBounds.first);
             bool leftToRight = c.x > 0;
             bool bottomToTop = c.y > 0;
-            const Point2<T> minCorner( leftToRight ? xBounds.first : xBounds.second,  bottomToTop ? yBounds.first : yBounds.second);
-            const Point2<T> maxCorner(!leftToRight ? xBounds.first : xBounds.second, !bottomToTop ? yBounds.first : yBounds.second);
-            auto currP = minCorner;
+            const SDK::Point2<T> minCorner( leftToRight ? xBounds.first : xBounds.second,  bottomToTop ? yBounds.first : yBounds.second);
+            const SDK::Point2<T> maxCorner(!leftToRight ? xBounds.first : xBounds.second, !bottomToTop ? yBounds.first : yBounds.second);
+            auto currP = maxCorner;
             T currV = Dot(c, currP);
-            const auto minCornerX = HalfPlane<T>(Line<T>(1., 0., minCorner.x), !leftToRight);
-            const auto minCornerY = HalfPlane<T>(Line<T>(0., 1., minCorner.y), !bottomToTop);
-            const auto maxCornerX = HalfPlane<T>(Line<T>(1., 0., maxCorner.x),  leftToRight);
-            const auto maxCornerY = HalfPlane<T>(Line<T>(0., 1., maxCorner.y),  bottomToTop);
+            const auto minCornerX = SDK::HalfPlane<T>(SDK::Line<T>(1., 0., minCorner.x), !leftToRight);
+            const auto minCornerY = SDK::HalfPlane<T>(SDK::Line<T>(0., 1., minCorner.y), !bottomToTop);
+            const auto maxCornerX = SDK::HalfPlane<T>(SDK::Line<T>(1., 0., maxCorner.x),  leftToRight);
+            const auto maxCornerY = SDK::HalfPlane<T>(SDK::Line<T>(0., 1., maxCorner.y),  bottomToTop);
 
             const T infty = 1.0001 * std::max(std::max(std::abs(xBounds.first), std::abs(xBounds.first)), std::max(std::abs(yBounds.first), std::abs(yBounds.first)));
 
@@ -67,54 +125,65 @@ namespace Common {
                 return v;
             }();
 
-            auto matrixAndBoundaries = [&minCornerX, &minCornerY, &maxCornerX, &maxCornerY, &matrix, &indices](int i) -> const HalfPlane<T>& {
+            const int kBoundaryPlanesCount = 4;
+            auto matrixAndBoundaries = [&minCornerX, &minCornerY, &maxCornerX, &maxCornerY, &matrix, &indices, &kBoundaryPlanesCount](int i) -> const SDK::HalfPlane<T>& {
                 switch (i)
                 {
                 case 0: return minCornerX;
                 case 1: return minCornerY;
                 case 2: return maxCornerX;
                 case 3: return maxCornerY;
-                default: return matrix[indices[i - 4]];
+                default: return matrix[indices[i - kBoundaryPlanesCount]];
                 }
             };
-            for (int i = 4; i < (int)matrix.size() + 4; ++i) {
-                const HalfPlane<T>& hp = matrixAndBoundaries(i);
+            std::pair<int, int> tightHalfPlanes;
+            for (int i = kBoundaryPlanesCount; i < (int)matrix.size() + kBoundaryPlanesCount; ++i) {
+                const SDK::HalfPlane<T>& hp = matrixAndBoundaries(i);
                 if (!hp.IsInside(currP, maxDiff)) {
                     // Rotate normal 90 degrees CCW to get a separator.
-                    const Point2<T> separator(SDK::Normalize(Point2<T>(-hp.GetNormal().y, hp.GetNormal().x)));
+                    const SDK::Point2<T> separator(SDK::Normalize(SDK::Point2<T>(-hp.GetNormal().y, hp.GetNormal().x)));
                     SDK::Point2<T> bestAgainst(details::Infinitize(separator.x, infty), details::Infinitize(separator.y, infty));
                     SDK::Point2<T> bestAlong(-bestAgainst);
+                    int secondHalfPlane = -1;
                     for (int j = 0; j < i; ++j) {
-                        const HalfPlane<T>& prev = matrixAndBoundaries(j);
+                        const SDK::HalfPlane<T>& prev = matrixAndBoundaries(j);
                         const T d = Dot(prev.GetNormal(), separator);
-                        const bool isParallel = AlmostEqualToZero(d, maxDiff);
+                        const bool isParallel = SDK::AlmostEqualToZero(d, maxDiff * maxDiff);
                         if (isParallel) {
                             if (!details::IsParallelFeasible(hp, prev, maxDiff)) {
                                 return nullopt;
                             }
                             continue;
                         }
-                        const Point2<T> p = Intersection(hp.boundary, prev.boundary, maxDiff);
+                        const auto pRaw = Intersection(hp.boundary, prev.boundary, maxDiff);
+                        // TODO: Clamping this way is wrong as we must ensure that the point is on the hp.boundary
+                        const auto p = details::Clamp(pRaw, -infty, infty);
                         bool isAlong = d > 0;
                         if (isAlong) {
-                            const Point2<T> increment = p - bestAlong;
+                            const auto increment = p - bestAlong;
                             if (Dot(increment, separator) > 0) {
                                 bestAlong = p;
+                                secondHalfPlane = j;
                             }                            
                         } else {
-                            const Point2<T> increment = p - bestAgainst;
+                            const auto increment = p - bestAgainst;
                             if (Dot(increment, separator) < 0) {
                                 bestAgainst = p;
+                                secondHalfPlane = j;
                             }
                         }
                     }
                     const bool bestAlongInf = bestAlong.IsInfinite();
                     const bool bestAgainstInf = bestAgainst.IsInfinite();
                     assert(!bestAlongInf || !bestAgainstInf);
-                    SDK::Point2<T> candidateP(kNan);
+                    SDK::Point2<T> candidateP(SDK::kNan);
                     T candidateV;
                     if (!bestAlongInf && !bestAgainstInf) {
-                        const bool isValid = Dot(bestAgainst - bestAlong, separator) > 0;
+                        const T cos = Dot(bestAgainst - bestAlong, separator);
+                        const bool isFeasible = cos > -std::sqrt(maxDiff);
+                        if (!isFeasible) {
+                            return nullopt;
+                        }
                         const T againstV = Dot(bestAgainst, c);
                         const T alongV   = Dot(bestAlong, c);
                         if (alongV > againstV) {
@@ -133,15 +202,25 @@ namespace Common {
                         candidateV = Dot(c, bestAlong);
                         candidateP = bestAlong;
                     }
-                    if (candidateV > currV) {
+                    if (candidateV <= currV) {
                         currV = candidateV;
                         currP = candidateP;
+                        tightHalfPlanes = std::make_pair(
+                            i - kBoundaryPlanesCount,
+                            secondHalfPlane - kBoundaryPlanesCount
+                        );
                         DebugPrintf("%f, %f\n", currP.x, currP.y);
                     }
                 }
             }
 
-            return std::make_optional(currP);
+            if (tightHalfPlanes.first >= 0) {
+                tightHalfPlanes.first = indices[tightHalfPlanes.first];
+            }
+            if (tightHalfPlanes.second >= 0) {
+                tightHalfPlanes.second = indices[tightHalfPlanes.second];
+            }
+            return std::make_optional(LpTask2dRes<T>{ currP, tightHalfPlanes });
         }
 
         //extern template std::optional<SDK::Point2<double>> solveMax(

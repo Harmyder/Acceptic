@@ -5,6 +5,6 @@
 
 #include <cassert>
 
-extern const double maxDiff;
-extern const double maxDiffSq;
+extern const double kMaxDiff;
+extern const double kMaxDiffSq;
 

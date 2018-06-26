@@ -40,9 +40,7 @@ namespace CommonTest
             matrix.emplace_back(Line<double>(0., -1.,  -1.));
             const auto best = solveMax(Point2<double>(1., 0.), matrix, bounds, boundsDoubled, maxDiff);
             Assert::IsTrue(best.has_value());
-            const Point2<double> expected(bounds.second, 1.);
-            const double d = (expected - best.value()).LenSq();
-            Assert::IsTrue(AlmostEqualToZero(d, maxDiffSq));
+            Assert::IsTrue(AlmostEqualRelativeAndAbs(best.value().point.x, bounds.second, maxDiff));
         }
 
         TEST_METHOD(solveMaxSquare_InsideOut_Infeasible) {
@@ -61,9 +59,7 @@ namespace CommonTest
             matrix.emplace_back(Line<double>( 0.,  1., -1));
             const auto best = solveMax(Point2<double>(1., 0.), matrix, bounds, bounds, maxDiff);
             Assert::IsTrue(best.has_value());
-            const Point2<double> expected(1., 1.);
-            const double d = (expected - best.value()).LenSq();
-            Assert::IsTrue(AlmostEqualToZero(d, maxDiffSq));
+            Assert::IsTrue(AlmostEqualRelativeAndAbs(best.value().point.x, 1., maxDiff));
         }
     };
 }
