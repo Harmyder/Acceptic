@@ -9,6 +9,9 @@
 using namespace Common;
 using namespace std;
 
+const double kMaxDiff = 1e-6;
+const double kMaxDiffSq = 1e-12;
+
 namespace
 {
     template <class T>
@@ -50,10 +53,10 @@ namespace Casting
             }
             visited[curr] = true;
             bigFaces.emplace_back(PlaneFromFace(m, verticesObj, curr));
-            const auto reference = SDK::Normalize(bigFaces.back().GetNormal());
+            const auto reference = SDK::Normalize(bigFaces.back().GetNormal(), kMaxDiff);
             auto handleFace = [&visited, &m, &reference, &verticesObj](int faceId) {
                 if (!visited[faceId]) {
-                    const auto normal = SDK::Normalize(PlaneFromFace(m, verticesObj, faceId).GetNormal());
+                    const auto normal = SDK::Normalize(PlaneFromFace(m, verticesObj, faceId).GetNormal(), kMaxDiff);
                     if (SDK::AlmostEqualToZero((normal - reference).LenSq(), kMaxDiffSq)) {
                         visited[faceId] = true;
                     }
@@ -64,8 +67,8 @@ namespace Casting
         return bigFaces;
     }
 
-    SDK::HalfPlane<double> ProjectIntersectionOnUpperHemispherePlane(SDK::Point3<double> hemisphereDirection) {
-        const auto inplaneNormal = Normalize(SDK::Point2<double>(hemisphereDirection.x, hemisphereDirection.y));
+    SDK::HalfPlane<double> ProjectHemisphereOnZUnitPlane(SDK::Point3<double> hemisphereDirection) {
+        const auto inplaneNormal = Normalize(SDK::Point2<double>(hemisphereDirection.x, hemisphereDirection.y), kMaxDiff);
         const double distanceToOrigin = hemisphereDirection.z;
         SDK::Point2<double> pointOnLine = -inplaneNormal * distanceToOrigin;
         const double freeTerm = Dot(pointOnLine, inplaneNormal);
@@ -74,33 +77,47 @@ namespace Casting
         return hp;
     }
 
+    SDK::Point3<double> ComputeHemisphereDirFromItsZUnitPlaneBoundary(SDK::HalfPlane<double> boundary) {
+        const double freeTerm = boundary.boundary.c;
+        const auto inplaneNormal = boundary.boundary.GetNormal();
+        const double distanceToOrigin = -freeTerm / inplaneNormal.LenSq();
+        SDK::Point3<double> dir(inplaneNormal.x, inplaneNormal.y, distanceToOrigin);
+        return dir;
+    }
+
     array<int, kCandidatesPerHemisphere> FindCover(const vector<SDK::HalfPlane<double>>& matrix) {
-        for (const auto& hp : matrix) {
-            DebugPrintf("normal = (%f, %f)\n", hp.boundary.a, hp.boundary.b);
-            DebugPrintf("y = %f*x + (%f)\n", -hp.boundary.a / hp.boundary.b, hp.boundary.c / hp.boundary.b);
-            DebugPrintf("\n");
-        }
         SDK::Point2<double> c(1., 1.);
-        const auto p2 = Optimization::solveMax(-c, matrix, { -kBound, kBound }, { -kBound, kBound }, kMaxDiff);
-        assert(std::abs(p2.value().point.x) != kBound && std::abs(p2.value().point.y) != kBound);
-        const auto p1 = Optimization::solveMax(c, matrix, { -kBound, kBound }, { -kBound, kBound }, kMaxDiff);
-        assert(std::abs(p1.value().point.x) != kBound && std::abs(p1.value().point.y) != kBound);
+        const auto kBounds = make_pair(-kBound, kBound);
+        const auto p1 = Optimization::solveMax(c, matrix, kBounds, kBounds, kMaxDiff).value();
+        const auto p1Inter = Intersection(matrix[p1.formingHalfPlanes.first].boundary, matrix[p1.formingHalfPlanes.second].boundary, kMaxDiff);
+        assert(std::abs(p1.point.x) != kBound && std::abs(p1.point.y) != kBound);
+        const auto p2 = Optimization::solveMax(-c, matrix, kBounds, kBounds, kMaxDiff).value();
+        const auto p2Inter = Intersection(matrix[p2.formingHalfPlanes.first].boundary, matrix[p2.formingHalfPlanes.second].boundary, kMaxDiff);
+        assert(std::abs(p2.point.x) != kBound && std::abs(p2.point.y) != kBound);
 
         vector<int> tights{
-            p1.value().formingHalfPlanes.first, p1.value().formingHalfPlanes.second,
-            p2.value().formingHalfPlanes.first, p2.value().formingHalfPlanes.second
+            p1.formingHalfPlanes.first, p1.formingHalfPlanes.second,
+            p2.formingHalfPlanes.first, p2.formingHalfPlanes.second
         };
         sort(tights.begin(), tights.end());
         tights.erase(unique(tights.begin(), tights.end()), tights.end());
+        for (auto t : tights) {
+            DebugPrintf("%d ", t);
+        }
+        DebugPrintf("\n");
+
+        // TODO: Fix solver to return only halfplanes from matrix
+        assert(find_if(tights.cbegin(), tights.cend(), [](int i) { return i < 0; }) == tights.cend());
 
         if (tights.size() == 3) {
+            assert(SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff));
             return { tights[0], tights[1], tights[2] };
         }
 
-        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff)) return { 0,1,2 };
-        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[3]], kMaxDiff)) return { 0,1,3 };
-        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { 0,2,3 };
-        if (SDK::IsPlaneCover(matrix[tights[1]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { 1,2,3 };
+        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff)) return { tights[0],tights[1],tights[2] };
+        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[3]], kMaxDiff)) return { tights[0],tights[1],tights[3] };
+        if (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { tights[0],tights[2],tights[3] };
+        if (SDK::IsPlaneCover(matrix[tights[1]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { tights[1],tights[2],tights[3] };
 
         throw logic_error("");
     }

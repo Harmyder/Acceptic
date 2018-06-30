@@ -3,6 +3,8 @@
 
 namespace Common {
     namespace SDK {
+#define ASSERT_NORMAL(a, maxDiff, maxDiffSq) assert(SDK::AlmostEqualRelativeAndAbs(a.LenSq(), Normalize(a, maxDiff).LenSq(), maxDiffSq) && "Vector " #a " is not normalized.");
+
         enum class IsOverflow {
             Yes, No
         };

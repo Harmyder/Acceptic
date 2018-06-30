@@ -145,9 +145,10 @@ namespace Common {
         }
 
         template <class T, int Dim>
-        Point<T, Dim> Normalize(Point<T, Dim> p) {
-            p /= p.Len();
-            return p;
+        Point<T, Dim> Normalize(Point<T, Dim> p, T maxDiff) {
+            const T len = p.Len();
+            assert(len > maxDiff);
+            return p / len;
         }
 
         // ************************************************************************************
@@ -193,6 +194,15 @@ namespace Common {
             Point3<T> operator*(const Point3<T>& p) const { return { Dot(r[0], p), Dot(r[1], p), Dot(r[2], p) }; }
 
             Matrix operator*(const T s) const { return { r[0] * s, r[1] * s, r[2] * s }; }
+
+            Matrix& Transpose() {
+                for (int i = 0; i < 3; ++i) {
+                    for (int j = 0; j < i; ++j) {
+                        std::swap(data[i * 3 + j], data[j * 3 + i]);
+                    }
+                }
+                return *this;
+            }
         };
 
         template <class T>
@@ -202,18 +212,29 @@ namespace Common {
         }
 
         template <class T>
-        Matrix<T, 3> RotationBetween(const Point3<T>& a, const Point3<T>& b, T maxDiffSq) {
-            assert(AlmostEqualRelativeAndAbs(a.LenSq(), Normalize(a).LenSq(), maxDiffSq));
-            assert(AlmostEqualRelativeAndAbs(b.LenSq(), Normalize(b).LenSq(), maxDiffSq));
-            assert(!AlmostEqualToZero(Cross(a, b).LenSq(), maxDiffSq));
+        Matrix<T, 3> RotationBetween(const Point3<T>& a, const Point3<T>& b, T maxDiff, T maxDiffSq) {
+            assert(AlmostEqualRelativeAndAbs(a.LenSq(), Normalize(a, maxDiff).LenSq(), maxDiffSq));
+            assert(AlmostEqualRelativeAndAbs(b.LenSq(), Normalize(b, maxDiff).LenSq(), maxDiffSq));
             const auto k = Cross(a, b);
             const T sin = k.Len();
-            const T cos = Dot(a, b);
             Matrix<T, 3> res(kIdentity);
-            Matrix<T, 3> kx = CreateCrossProdMatrix(Normalize(k));
+            if (AlmostEqualToZero(sin, maxDiff)) {
+                if (AlmostEqualToZero((a + b).LenSq(), maxDiffSq)) {
+                    res = res * (-1);
+                }
+                return res;
+            }
+            const T cos = Dot(a, b);
+            Matrix<T, 3> kx = CreateCrossProdMatrix(Normalize(k, maxDiff));
             res += kx * sin;
             res += kx * kx * (1 - cos);
             return res;
+        }
+
+        template <class T>
+        Matrix<T, 3> Transpose(const Matrix<T, 3>& m) {
+            auto res = m;
+            return res.Transpose();
         }
 
         // ************************************************************************************
@@ -240,8 +261,13 @@ namespace Common {
                 return normal;
             }
 
-            T ComputeX(T y) const { return (c - b * y) / a; }
-            T ComputeY(T x) const { return (c - a * x) / b; }
+            T ComputeX(T y) const {
+                return (c - b * y) / a;
+            }
+            T ComputeY(T x) const {
+                return (c - a * x) / b;
+            }
+            static const std::array<T(HyperPlane::*)(T) const, 2> Compute;
 
             bool IsHorizontal(T maxDiff) const { return AlmostEqualToZero(a, maxDiff); }
             bool IsVertical(T maxDiff) const { return AlmostEqualToZero(b, maxDiff); }
@@ -276,6 +302,9 @@ namespace Common {
                 return HyperPlane(dir.x, dir.y, intersept);
             }
         };
+
+        template <class T>
+        const std::array<T(HyperPlane<T, 2>::*)(T) const, 2> HyperPlane<T, 2>::Compute = { &HyperPlane::ComputeX, &HyperPlane::ComputeY };
 
         template <class T> using Line = HyperPlane<T, 2>;
 

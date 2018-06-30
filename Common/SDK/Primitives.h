@@ -67,5 +67,32 @@ namespace Common {
             const bool cover = gammaOk && betaOk && alphaOk;
             return cover;
         }
+
+        template <class T>
+        T Infinitize(T v, T infty) {
+            if (v > 0) return infty;
+            if (v < 0) return -infty;
+            return 0;
+        }
+
+        template <class T>
+        Point2<T> ClampOnLine(Point2<T> p, const Line<T>& line, std::pair<T, T> xb, std::pair<T, T> yb) {
+            auto clampOnAxis = [&p, &line](int indA, int indB, const std::pair<T, T>& boundsA, const std::pair<T, T>& boundsB) -> bool {
+                const T a = std::clamp(p.data[indA], boundsA.first, boundsA.second);
+                if (p.data[indA] != a) {
+                    const T b = (line.*Line<T>::Compute[indB])(a);
+                    if (boundsB.first <= b && b <= boundsB.second) {
+                        p.data[indA] = a;
+                        p.data[indB] = b;
+                        return true;
+                    }
+                }
+                return false;
+            };
+            if (!clampOnAxis(0, 1, xb, yb)) {
+                clampOnAxis(1, 0, yb, xb);
+            }
+            return p;
+        }
     }
 }

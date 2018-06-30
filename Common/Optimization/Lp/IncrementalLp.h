@@ -20,26 +20,18 @@ namespace Common {
                 SDK::Line<T> perp(-a.boundary.b, a.boundary.a, 0.);
                 const auto intCurr = Intersection(perp, a.boundary, maxDiff);
                 const auto intPrev = Intersection(perp, b.boundary, maxDiff);
-                const auto inTheMiddle = (intCurr + intPrev) / 2;
-                if (!a.IsInside(inTheMiddle, maxDiff) && !b.IsInside(inTheMiddle, maxDiff)) {
-                    return false;
+                const T distanceSq = (intCurr - intPrev).LenSq();
+                const T farEnough = distanceSq > maxDiff * maxDiff;
+                if (farEnough) {
+                    const auto inTheMiddle = (intCurr + intPrev) / 2;
+                    if (!a.IsInside(inTheMiddle, maxDiff) && !b.IsInside(inTheMiddle, maxDiff)) {
+                        return false;
+                    }
                 }
                 return true;
             }
 
-            template <class T>
-            T Infinitize(T v, T infty) {
-                if (v > 0) return infty;
-                if (v < 0) return -infty;
-                return 0;
-            }
 
-            template <class T>
-            SDK::Point2<T> Clamp(SDK::Point2<T> p, T min, T max) {
-                p.x = std::clamp(p.x, min, max);
-                p.y = std::clamp(p.y, min, max);
-                return p;
-            }
         }
 
         template <class T>
@@ -141,35 +133,36 @@ namespace Common {
                 const SDK::HalfPlane<T>& hp = matrixAndBoundaries(i);
                 if (!hp.IsInside(currP, maxDiff)) {
                     // Rotate normal 90 degrees CCW to get a separator.
-                    const SDK::Point2<T> separator(SDK::Normalize(SDK::Point2<T>(-hp.GetNormal().y, hp.GetNormal().x)));
-                    SDK::Point2<T> bestAgainst(details::Infinitize(separator.x, infty), details::Infinitize(separator.y, infty));
+                    const SDK::Point2<T> separator(SDK::Normalize(SDK::Point2<T>(-hp.GetNormal().y, hp.GetNormal().x), maxDiff));
+                    SDK::Point2<T> bestAgainst(SDK::Infinitize(separator.x, infty), SDK::Infinitize(separator.y, infty));
                     SDK::Point2<T> bestAlong(-bestAgainst);
-                    int secondHalfPlane = -1;
+                    int bestSecondHalfPlaneAlong   = std::numeric_limits<int>::min();
+                    int bestSecondHalfPlaneAgainst = std::numeric_limits<int>::min();
                     for (int j = 0; j < i; ++j) {
                         const SDK::HalfPlane<T>& prev = matrixAndBoundaries(j);
                         const T d = Dot(prev.GetNormal(), separator);
-                        const bool isParallel = SDK::AlmostEqualToZero(d, maxDiff * maxDiff);
+                        // TODO maxDiff should be parameterized on the region bounds
+                        const bool isParallel = SDK::AlmostEqualToZero(d, maxDiff);
                         if (isParallel) {
-                            if (!details::IsParallelFeasible(hp, prev, maxDiff)) {
+                            if (!details::IsParallelFeasible(hp, prev, sqrt(maxDiff))) {
                                 return nullopt;
                             }
                             continue;
                         }
                         const auto pRaw = Intersection(hp.boundary, prev.boundary, maxDiff);
-                        // TODO: Clamping this way is wrong as we must ensure that the point is on the hp.boundary
-                        const auto p = details::Clamp(pRaw, -infty, infty);
+                        const auto p = SDK::ClampOnLine<T>(pRaw, hp.boundary, std::minmax(minCorner.x, maxCorner.x), std::minmax(minCorner.y, maxCorner.y));
                         bool isAlong = d > 0;
                         if (isAlong) {
                             const auto increment = p - bestAlong;
                             if (Dot(increment, separator) > 0) {
                                 bestAlong = p;
-                                secondHalfPlane = j;
+                                bestSecondHalfPlaneAlong = j;
                             }                            
                         } else {
                             const auto increment = p - bestAgainst;
                             if (Dot(increment, separator) < 0) {
                                 bestAgainst = p;
-                                secondHalfPlane = j;
+                                bestSecondHalfPlaneAgainst = j;
                             }
                         }
                     }
@@ -178,6 +171,7 @@ namespace Common {
                     assert(!bestAlongInf || !bestAgainstInf);
                     SDK::Point2<T> candidateP(SDK::kNan);
                     T candidateV;
+                    int candidateSecondHalfPlane;
                     if (!bestAlongInf && !bestAgainstInf) {
                         const T cos = Dot(bestAgainst - bestAlong, separator);
                         const bool isFeasible = cos > -std::sqrt(maxDiff);
@@ -189,27 +183,34 @@ namespace Common {
                         if (alongV > againstV) {
                             candidateV = alongV;
                             candidateP = bestAlong;
+                            candidateSecondHalfPlane = bestSecondHalfPlaneAlong;
                         }
                         else {
                             candidateV = againstV;
                             candidateP = bestAgainst;
+                            candidateSecondHalfPlane = bestSecondHalfPlaneAgainst;
                         }
                     } else if (bestAlong.IsInfinite()) {
                         candidateV = Dot(c, bestAgainst);
                         candidateP = bestAgainst;
+                        candidateSecondHalfPlane = bestSecondHalfPlaneAgainst;
                     } else {
                         assert(bestAgainst.IsInfinite());
                         candidateV = Dot(c, bestAlong);
                         candidateP = bestAlong;
+                        candidateSecondHalfPlane = bestSecondHalfPlaneAlong;
                     }
                     if (candidateV <= currV) {
                         currV = candidateV;
                         currP = candidateP;
                         tightHalfPlanes = std::make_pair(
                             i - kBoundaryPlanesCount,
-                            secondHalfPlane - kBoundaryPlanesCount
+                            candidateSecondHalfPlane - kBoundaryPlanesCount
                         );
-                        DebugPrintf("%f, %f\n", currP.x, currP.y);
+                        const auto interRaw = Intersection(hp.boundary, matrixAndBoundaries(candidateSecondHalfPlane).boundary, kMaxDiff);
+                        const auto inter = SDK::ClampOnLine<T>(interRaw, hp.boundary, std::minmax(minCorner.x, maxCorner.x), std::minmax(minCorner.y, maxCorner.y));
+                        const T distance = (inter - currP).LenSq();
+                        assert(SDK::AlmostEqualToZero(distance, maxDiff));
                     }
                 }
             }

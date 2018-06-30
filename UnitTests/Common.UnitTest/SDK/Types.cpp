@@ -99,7 +99,7 @@ namespace CommonTest
         TEST_METHOD(RotationBetweenXY) {
             Point3<double> x(kXUnit);
             Point3<double> y(kYUnit);
-            const auto m = RotationBetween(x, y, kMaxDiffSq);
+            const auto m = RotationBetween(x, y, kMaxDiff, kMaxDiffSq);
             const auto actual = m * x;
             const double d = (actual - y).LenSq();
             Assert::IsTrue(AlmostEqualToZero(d, kMaxDiffSq));
@@ -112,10 +112,10 @@ namespace CommonTest
                 {-0.192307692307692,   0.961538461538461, 0.196116135138184},
                 {-0.980580675690920,   -0.196116135138184,   0.}
             };
-            const auto actual = RotationBetween(x, y, kMaxDiffSq);
+            const auto actual = RotationBetween(x, y, kMaxDiff, kMaxDiffSq);
             for (int i = 0; i < 3; ++i) {
                 for (int j = 0; j < 3; ++j) {
-                    Assert::IsTrue(AlmostEqualRelativeAndAbs(actual.r[i].data[j], expected.r[i].data[j], kMaxDiff), (L"i = " + to_wstring(i) + L", j = " + to_wstring(j)).c_str());
+                    Assert::IsTrue(AlmostEqualRelativeAndAbs(actual.r[i].data[j], expected.r[i].data[j], kMaxDiff, kMaxDiff), (L"i = " + to_wstring(i) + L", j = " + to_wstring(j)).c_str());
                 }
             }
         }

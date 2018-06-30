@@ -29,6 +29,14 @@ namespace CommonTest
             Assert::IsTrue(expected == isCover);
         }
 
+        static const std::pair<double, double> xb;
+        static const std::pair<double, double> yb;
+        void TestClampOnLine(const SDK::Point2<double> p, const SDK::Line<double> l, const SDK::Point2<double> expected, std::pair<double, double> xb = xb, std::pair<double, double> yb = yb) {
+            const auto actual = ClampOnLine(p, l, xb, yb);
+            const double d = (actual - expected).LenSq();
+            Assert::IsTrue(SDK::AlmostEqualToZero(d, kMaxDiffSq));
+        }
+
     public:
         TEST_METHOD(IntersectionVerVer) {
             const Line<double> l(1., 0., 1.);
@@ -77,5 +85,39 @@ namespace CommonTest
             TestIsPlaneCover(l1, l2, l3, false, false, true, false);
             TestIsPlaneCover(l1, l2, l3, false, true, false, false);
         }
+
+        TEST_METHOD(InfinitizePlus) {
+            Assert::AreEqual(std::numeric_limits<double>::infinity(), Infinitize(2., std::numeric_limits<double>::infinity()));
+        }
+
+        TEST_METHOD(InfinitizeMinus) {
+            Assert::AreEqual(-std::numeric_limits<double>::infinity(), Infinitize(-2., std::numeric_limits<double>::infinity()));
+        }
+
+        TEST_METHOD(ClampOnLineVerticalNo) {
+            Point2<double> p{ (xb.first + xb.second) / 2., (yb.first + yb.second) / 2. };
+            TestClampOnLine(p, Line<double>(1., 0., 1.), p);
+        }
+
+        TEST_METHOD(ClampOnLineVerticalClamp) {
+            Point2<double> p((xb.first + xb.second) / 2., 2 * yb.second);
+            Point2<double> expected(p.x, yb.second);
+            TestClampOnLine(p, Line<double>(1., 0., p.x), expected);
+        }
+
+        TEST_METHOD(ClampOnLineHorizontalNo) {
+            Point2<double> p{ (xb.first + xb.second) / 2., (yb.first + yb.second) / 2. };
+            TestClampOnLine(p, Line<double>(0., 1., 1.), p);
+        }
+
+        TEST_METHOD(ClampOnLineHorizontalClamp) {
+            Point2<double> p{ xb.second * 2., (yb.first + yb.second) / 2. };
+            Point2<double> expected(xb.second, p.y);
+            TestClampOnLine(p, Line<double>(0., 1., p.y), expected);
+        }
+
     };
+
+    const std::pair<double, double> Primitives_Test::xb = { -100., 101. };
+    const std::pair<double, double> Primitives_Test::yb = { -200., 201. };
 }
