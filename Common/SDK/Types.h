@@ -256,9 +256,14 @@ namespace Common {
                 std::array<T, 3> data;
             };
 
-            Point<T, 2> GetNormal() const {
-                Point<T, 2> normal(data.data());
+            Point2<T> GetNormal() const {
+                Point2<T> normal(data.data());
                 return normal;
+            }
+
+            void SetNormal(const Point2<double>& normal) {
+                a = normal.x;
+                b = normal.y;
             }
 
             T ComputeX(T y) const {
@@ -325,6 +330,12 @@ namespace Common {
             Point<T, 3> GetNormal() const {
                 Point<T, 3> normal(data.data());
                 return normal;
+            }
+
+            void SetNormal(const Point3<double>& normal) {
+                a = normal.x;
+                b = normal.y;
+                c = normal.z;
             }
 
             T ComputeX(T y, T z) const { return (c - b * y - c * z) / a; }

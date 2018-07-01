@@ -25,7 +25,14 @@ namespace Casting
         Common::SDK::Normalize(Common::SDK::Point3<double>(0., -.2,  1.), kMaxDiff),
         Common::SDK::Normalize(Common::SDK::Point3<double>(0., -.2, -1.), kMaxDiff)
     };
-    const double kBound = 1 << 30;
+    // I assume that the smallest possible angle between facets normals is
+    const double kSmallestAngle = 1e-5;
+    const double kCosSmallestAngle     = std::cos(Casting::kSmallestAngle);
+    const double kCosSmallestHalfAngle = std::cos(Casting::kSmallestAngle / 2.);
+    const double kCosSmallestAngleSq     = kCosSmallestAngle * kCosSmallestAngle;
+    const double kCosSmallestHalfAngleSq = kCosSmallestHalfAngle * kCosSmallestHalfAngle;
+    const double kBound = 1. / std::tan(kSmallestAngle / 2) + 1.;
+
     const int kCandidatesPerHemisphere = 3;
     const int kCoverHemispheresCount = 4;
     const Common::SDK::Point3<double> upperHemisphereDirection(0., 0., 1.);
@@ -35,4 +42,6 @@ namespace Casting
     Common::SDK::Point3<double> ComputeHemisphereDirFromItsZUnitPlaneBoundary(Common::SDK::HalfPlane<double> boundary);
 
     std::array<int, kCandidatesPerHemisphere> FindCover(const std::vector<Common::SDK::HalfPlane<double>>& matrix);
+
+    bool IsTheSameFaceNormal(const Common::SDK::Point3<double>& n1, const Common::SDK::Point3<double>& n2);
 }

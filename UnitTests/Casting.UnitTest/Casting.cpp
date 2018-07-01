@@ -71,5 +71,12 @@ namespace CommonTest
             const auto bigFaces = PrepareAndRun(verticesData, trianglesData);
             Assert::AreEqual((int)bigFaces.size(), 6);
         }
+
+        TEST_METHOD(ProjectHemisphereOnZUnitPlane_Reverse) {
+            const auto expected = Normalize(SDK::Point3<double>(1., 1., 1.), kMaxDiff);
+            const auto actual = ComputeHemisphereDirFromItsZUnitPlaneBoundary(ProjectHemisphereOnZUnitPlane(expected));
+            const double d = (expected - actual).LenSq();
+            Assert::IsTrue(SDK::AlmostEqualToZero(d, kMaxDiffSq));
+        }
     };
 }

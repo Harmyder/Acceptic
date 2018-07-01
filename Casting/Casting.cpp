@@ -45,6 +45,7 @@ namespace Casting
     vector<SDK::Plane<double>> CombineFaces(const Dcel::Mesh<int>& m, vector<SDK::Point3<double>> verticesObj) {
         vector<SDK::Plane<double>> bigFaces;
         vector<bool> visited(m.Faces().size());
+        vector<int> frontier;
         int curr = -1;
         const int facesCount = (int)m.Faces().size();
         while (++curr < facesCount) {
@@ -54,22 +55,32 @@ namespace Casting
             visited[curr] = true;
             bigFaces.emplace_back(PlaneFromFace(m, verticesObj, curr));
             const auto reference = SDK::Normalize(bigFaces.back().GetNormal(), kMaxDiff);
-            auto handleFace = [&visited, &m, &reference, &verticesObj](int faceId) {
+            frontier.push_back(curr);
+            auto handleFace = [&visited, &frontier, &m, &reference, &verticesObj](int faceId) {
                 if (!visited[faceId]) {
                     const auto normal = SDK::Normalize(PlaneFromFace(m, verticesObj, faceId).GetNormal(), kMaxDiff);
-                    if (SDK::AlmostEqualToZero((normal - reference).LenSq(), kMaxDiffSq)) {
+                    // Assume that adjacent faces can't have almost oposite normals
+                    if (SDK::AlmostEqualToZero((normal - reference).LenSq(), kMaxDiffSq) || SDK::AlmostEqualToZero((normal + reference).LenSq(), kMaxDiffSq)) {
                         visited[faceId] = true;
+                        frontier.push_back(faceId);
                     }
                 }
             };
-            Dcel::VisitNeighbouringFaces(m, curr, handleFace);
+            while (frontier.size() > 0) {
+                const int i = frontier.back();
+                frontier.pop_back();
+                Dcel::VisitNeighbouringFaces(m, i, handleFace);
+            }
+        }
+        for (auto& face : bigFaces) {
+            face.SetNormal(Normalize(face.GetNormal(), kMaxDiff));
         }
         return bigFaces;
     }
 
     SDK::HalfPlane<double> ProjectHemisphereOnZUnitPlane(SDK::Point3<double> hemisphereDirection) {
-        const auto inplaneNormal = Normalize(SDK::Point2<double>(hemisphereDirection.x, hemisphereDirection.y), kMaxDiff);
-        const double distanceToOrigin = hemisphereDirection.z;
+        const auto inplaneNormal = SDK::Point2<double>(hemisphereDirection.x, hemisphereDirection.y);
+        const double distanceToOrigin = hemisphereDirection.z / inplaneNormal.Len();
         SDK::Point2<double> pointOnLine = -inplaneNormal * distanceToOrigin;
         const double freeTerm = Dot(pointOnLine, inplaneNormal);
         SDK::Line<double> boundary(inplaneNormal, freeTerm);
@@ -81,7 +92,7 @@ namespace Casting
         const double freeTerm = boundary.boundary.c;
         const auto inplaneNormal = boundary.boundary.GetNormal();
         const double distanceToOrigin = -freeTerm / inplaneNormal.LenSq();
-        SDK::Point3<double> dir(inplaneNormal.x, inplaneNormal.y, distanceToOrigin);
+        SDK::Point3<double> dir(inplaneNormal.x, inplaneNormal.y, distanceToOrigin * inplaneNormal.Len());
         return dir;
     }
 
@@ -89,10 +100,9 @@ namespace Casting
         SDK::Point2<double> c(1., 1.);
         const auto kBounds = make_pair(-kBound, kBound);
         const auto p1 = Optimization::solveMax(c, matrix, kBounds, kBounds, kMaxDiff).value();
-        const auto p1Inter = Intersection(matrix[p1.formingHalfPlanes.first].boundary, matrix[p1.formingHalfPlanes.second].boundary, kMaxDiff);
-        assert(std::abs(p1.point.x) != kBound && std::abs(p1.point.y) != kBound);
         const auto p2 = Optimization::solveMax(-c, matrix, kBounds, kBounds, kMaxDiff).value();
-        const auto p2Inter = Intersection(matrix[p2.formingHalfPlanes.first].boundary, matrix[p2.formingHalfPlanes.second].boundary, kMaxDiff);
+
+        assert(std::abs(p1.point.x) != kBound && std::abs(p1.point.y) != kBound);
         assert(std::abs(p2.point.x) != kBound && std::abs(p2.point.y) != kBound);
 
         vector<int> tights{
@@ -101,10 +111,6 @@ namespace Casting
         };
         sort(tights.begin(), tights.end());
         tights.erase(unique(tights.begin(), tights.end()), tights.end());
-        for (auto t : tights) {
-            DebugPrintf("%d ", t);
-        }
-        DebugPrintf("\n");
 
         // TODO: Fix solver to return only halfplanes from matrix
         assert(find_if(tights.cbegin(), tights.cend(), [](int i) { return i < 0; }) == tights.cend());
@@ -120,5 +126,9 @@ namespace Casting
         if (SDK::IsPlaneCover(matrix[tights[1]], matrix[tights[2]], matrix[tights[3]], kMaxDiff)) return { tights[1],tights[2],tights[3] };
 
         throw logic_error("");
+    }
+
+    bool IsTheSameFaceNormal(const SDK::Point3<double>& n1, const SDK::Point3<double>& n2) {
+        return Dot(n1, n2) > Casting::kCosSmallestHalfAngle;
     }
 }
