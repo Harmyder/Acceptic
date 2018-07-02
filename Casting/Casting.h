@@ -27,13 +27,20 @@ namespace Casting
     };
     // I assume that the smallest possible angle between facets normals is
     const double kSmallestAngle = 1e-5;
+
     const double kCosSmallestAngle     = std::cos(Casting::kSmallestAngle);
     const double kCosSmallestHalfAngle = std::cos(Casting::kSmallestAngle / 2.);
     const double kCosSmallestAngleSq     = kCosSmallestAngle * kCosSmallestAngle;
     const double kCosSmallestHalfAngleSq = kCosSmallestHalfAngle * kCosSmallestHalfAngle;
+
+    const double kSinSmallestAngle = std::sin(Casting::kSmallestAngle);
+    const double kSinSmallestHalfAngle = std::sin(Casting::kSmallestAngle / 2.);
+    const double kSinSmallestAngleSq = kSinSmallestAngle * kSinSmallestAngle;
+    const double kSinSmallestHalfAngleSq = kSinSmallestHalfAngle * kSinSmallestHalfAngle;
+
     const double kBound = 1. / std::tan(kSmallestAngle / 2) + 1.;
 
-    const int kCandidatesPerHemisphere = 3;
+    const int kCandidatesPerHemisphere = 4;
     const int kCoverHemispheresCount = 4;
     const Common::SDK::Point3<double> upperHemisphereDirection(0., 0., 1.);
 
@@ -44,4 +51,15 @@ namespace Casting
     std::array<int, kCandidatesPerHemisphere> FindCover(const std::vector<Common::SDK::HalfPlane<double>>& matrix);
 
     bool IsTheSameFaceNormal(const Common::SDK::Point3<double>& n1, const Common::SDK::Point3<double>& n2);
+
+    Common::SDK::Matrix<double, 3> ProjectFacesOnUpperHemisphere(
+        const Common::SDK::Point3<double>& actualNormal,
+        const std::vector<Common::SDK::Plane<double>>& bigFaces,
+        const int excludeIndex,
+        std::vector<Common::SDK::HalfPlane<double>>& matrix,
+        std::vector<int>& indices
+    );
+
+    std::vector<int> FindS2Coverage(const std::vector<Common::SDK::Plane<double>>& bigFaces);
+    std::vector<std::pair<int, Common::SDK::Point3<double>>> CheckCandidates(const std::vector<Common::SDK::Plane<double>>& bigFaces, const std::vector<int>& candidates);
 }

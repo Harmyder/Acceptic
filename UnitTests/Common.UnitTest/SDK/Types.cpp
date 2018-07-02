@@ -105,6 +105,13 @@ namespace CommonTest
             Assert::IsTrue(AlmostEqualToZero(d, kMaxDiffSq));
         }
 
+        //>> from = [0 0 1];
+        //>> to = [0.980580675690920, 0.196116135138184, 0];
+        //>> vrrotvec2mat(vrrotvec(from, to))
+        //ans =
+        //    0.0385   -0.1923    0.9806
+        //   -0.1923    0.9615    0.1961
+        //   -0.9806   -0.1961    0.0000
         TEST_METHOD(RotationExample) {
             Point3<double> x(kZUnit);
             Point3<double> y(0.980580675690920, 0.196116135138184, 0);
