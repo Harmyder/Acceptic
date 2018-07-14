@@ -48,7 +48,7 @@ namespace Casting
     Common::SDK::HalfPlane<double> ProjectHemisphereOnZUnitPlane(Common::SDK::Point3<double> hemisphereDirection);
     Common::SDK::Point3<double> ComputeHemisphereDirFromItsZUnitPlaneBoundary(Common::SDK::HalfPlane<double> boundary);
 
-    std::array<int, kCandidatesPerHemisphere> FindCover(const std::vector<Common::SDK::HalfPlane<double>>& matrix);
+    std::vector<int> FindMaxSubcover(const std::vector<Common::SDK::HalfPlane<double>>& matrix);
 
     bool IsTheSameFaceNormal(const Common::SDK::Point3<double>& n1, const Common::SDK::Point3<double>& n2);
 

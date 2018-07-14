@@ -96,41 +96,33 @@ namespace Casting
         return dir;
     }
 
-    array<int, kCandidatesPerHemisphere> FindCover(const vector<SDK::HalfPlane<double>>& matrix) {
+    vector<int> FindMaxSubcover(const vector<SDK::HalfPlane<double>>& matrix) {
         //for (auto hp : matrix) {
-        //    DebugPrintf("y = %4f*x + %4f\n", -hp.boundary.a / hp.boundary.b, hp.boundary.c / hp.boundary.b);
+        //    DebugPrintf("y = %4f*x + %4f, (%4f, %4f)\n", -hp.boundary.a / hp.boundary.b, hp.boundary.c / hp.boundary.b, hp.boundary.GetNormal().x, hp.boundary.GetNormal().y);
         //}
         SDK::Point2<double> c(1., 1.);
         const auto kBounds = make_pair(-kBound, kBound);
-        const auto p1 = Optimization::solveMax(c, matrix, kBounds, kBounds, kMaxDiff).value();
-        const auto p2 = Optimization::solveMax(-c, matrix, kBounds, kBounds, kMaxDiff).value();
+        const auto p1 = Optimization::LpSolver( c, matrix, kBounds, kBounds, kMaxDiff).solveMax().value();
+        const auto p2 = Optimization::LpSolver(-c, matrix, kBounds, kBounds, kMaxDiff).solveMax().value();
         vector<int> tights{
             p1.formingHalfPlanes.first, p1.formingHalfPlanes.second,
             p2.formingHalfPlanes.first, p2.formingHalfPlanes.second
         };
-        sort(tights.begin(), tights.end());
+        std::sort(tights.begin(), tights.end());
+        //TODO: what if two halfplanes are identical?
         tights.erase(unique(tights.begin(), tights.end()), tights.end());
         const int boundaryHpCount = (int)count_if(tights.cbegin(), tights.cend(), [](int i) { return i < 0; });
-        assert(boundaryHpCount <= 2);
+        assert(boundaryHpCount <= tights.size() - 1);
         copy(tights.cbegin() + boundaryHpCount, tights.cend(), tights.begin());
         tights.erase(tights.end() - boundaryHpCount, tights.end());
 
-        if (tights.size() == 3) {
-            assert(SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff));
-            return { tights[0], tights[1], tights[2], tights[2] };
-        }
-        else if (tights.size() == 2) {
-            assert(SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[1]], kMaxDiff));
-            return { tights[0], tights[1], tights[1], tights[1] };
-        }
-        else {
-            assert(tights.size() == 4);
-            assert (SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff) ||
-                    SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[3]], kMaxDiff) ||
-                    SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[2]], matrix[tights[3]], kMaxDiff) ||
-                    SDK::IsPlaneCover(matrix[tights[1]], matrix[tights[2]], matrix[tights[3]], kMaxDiff));
-            return { tights[0], tights[1], tights[2], tights[3] };
-        }
+        // Only in case we have all four halfplanes we necessarily have a cover
+        assert(tights.size() != 4 ||
+            SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[2]], kMaxDiff) ||
+            SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[1]], matrix[tights[3]], kMaxDiff) ||
+            SDK::IsPlaneCover(matrix[tights[0]], matrix[tights[2]], matrix[tights[3]], kMaxDiff) ||
+            SDK::IsPlaneCover(matrix[tights[1]], matrix[tights[2]], matrix[tights[3]], kMaxDiff));
+        return tights;
     }
 
     bool IsTheSameFaceNormal(const SDK::Point3<double>& n1, const SDK::Point3<double>& n2) {
@@ -150,16 +142,18 @@ namespace Casting
         for (int j = 0; j < (int)bigFaces.size(); ++j) {
             if (j != excludeIndex) {
                 const auto faceNormal = bigFaces[j].GetNormal();
-                assert((faceNormal - actualNormal).LenSq() > kMaxDiffSq);
-                const double cos = Dot(faceNormal, actualNormal);
-                const bool isParticipateInCover = (cos >= 0);
-                if (isParticipateInCover) {
-                    const auto rotatedFaceNormal = rotation * faceNormal;
-//                    DebugPrintf("rotated [%f %f %f]\n", rotatedFaceNormal.x, rotatedFaceNormal.y, rotatedFaceNormal.z);
-                    assert(SDK::AlmostEqualRelativeAndAbs(Dot(rotatedFaceNormal, Casting::upperHemisphereDirection), cos, kMaxDiff));
-                    const auto halfPlane = Casting::ProjectHemisphereOnZUnitPlane(rotatedFaceNormal);
-                    matrix.push_back(halfPlane);
-                    indices.push_back(j);
+                const bool theSameNormal = (faceNormal - actualNormal).LenSq() < kMaxDiffSq;
+                if (!theSameNormal) {
+                    const double cos = Dot(faceNormal, actualNormal);
+                    const bool isParticipateInCover = (cos >= -kMaxDiff);
+                    if (isParticipateInCover) {
+                        const auto rotatedFaceNormal = rotation * faceNormal;
+//                        DebugPrintf("rotated [%f %f %f]\n", rotatedFaceNormal.x, rotatedFaceNormal.y, rotatedFaceNormal.z);
+                        assert(SDK::AlmostEqualRelativeAndAbs(Dot(rotatedFaceNormal, Casting::upperHemisphereDirection), cos, kMaxDiff));
+                        const auto halfPlane = Casting::ProjectHemisphereOnZUnitPlane(rotatedFaceNormal);
+                        matrix.push_back(halfPlane);
+                        indices.push_back(j);
+                    }
                 }
             }
         }
@@ -179,6 +173,7 @@ namespace Casting
                 const auto bigFaceNormal = bigFaces[j].GetNormal();
                 if (IsTheSameFaceNormal(bigFaceNormal, actualNormal)) {
                     if (singleElementCoverage) {
+                        // We have at least two big faces with the same normal as up direction, so extracting is impossible
                         candidates.pop_back();
                         break;
                     }
@@ -198,13 +193,75 @@ namespace Casting
                 //for (auto k : matrix) {
                 //    DebugPrintf("matrix [%f %f %f]\n", k.boundary.a, k.boundary.b, k.boundary.c);
                 //}
-                const auto coverIndices = FindCover(matrix);
+                auto coverIndices = FindMaxSubcover(matrix);
+                const bool oneMissed = 
+                    coverIndices.size() == 2 && !SDK::IsPlaneCover(matrix[coverIndices[0]], matrix[coverIndices[1]], kMaxDiff) ||
+                    coverIndices.size() == 3 && !SDK::IsPlaneCover(matrix[coverIndices[0]], matrix[coverIndices[1]], matrix[coverIndices[2]], kMaxDiff);
+                const bool twoMissed = coverIndices.size() == 1;
+                if (oneMissed || twoMissed) {
+                    const auto hp = matrix[coverIndices[0]];
+                    ProjectFacesOnUpperHemisphere(-actualNormal, bigFaces, -1, matrix, indices);
+                    if (twoMissed) {
+                        // We can take advantage of the fact that all down-looking faces once projected become halfplanes which don't contain origin
+                        //  222\1111111111/222
+                        //  22222\111.11/22222         . represents origin
+                        //  2222222\11/2222222
+                        //  22222222/\22222222         a digit tells the number of halfplanes which cover this spot
+                        //  222222/3333\222222
+                        //  ----*--------*----         -- the plane we have
+                        //  11/222222222222\11
+                        const int meIndex = coverIndices[0];
+                        for (int additional = 0; additional < (int)matrix.size(); ++additional) {
+                            if (additional != meIndex && SDK::IsPlaneCover(matrix[indices[meIndex]], matrix[indices[additional]], kMaxDiff)) {
+                                coverIndices.push_back(additional);
+                                break;
+                            }
+                        }
+                        const bool oneIsEnough = coverIndices.size() == 2;
+                        if (!oneIsEnough) {
+                            
+                        }
+                    }
+                    else {
+                        assert(oneMissed);
+                        auto checkPair = [&matrix = as_const(matrix), &indices = as_const(indices), &coverIndices](int meIndex0, int meIndex1) {
+                            for (int additional = 0; additional < (int)matrix.size(); ++additional) {
+                                if (additional != meIndex0 && additional != meIndex1) {
+                                    if (SDK::IsPlaneCover(matrix[indices[meIndex0]], matrix[indices[meIndex1]], matrix[indices[additional]], kMaxDiff)) {
+                                        coverIndices.push_back(additional);
+                                        return true;
+                                    }
+                                }
+                            }
+                            return false;
+                        };
+                        if (coverIndices.size() == 2) {
+                            checkPair(coverIndices[0], coverIndices[1]);
+                        }
+                        else {
+                            assert(coverIndices.size() == 3);
+                            if (checkPair(coverIndices[0], coverIndices[1])) {
+                                coverIndices[2] = coverIndices[3];
+                            }
+                            else if (checkPair(coverIndices[0], coverIndices[2])) {
+                                coverIndices[1] = coverIndices[3];
+                            }
+                            else if (checkPair(coverIndices[1], coverIndices[2])) {
+                                coverIndices[0] = coverIndices[3];
+                            }
+                            coverIndices.pop_back();
+                        }
+                        if (coverIndices.size() != 3) {
+                            throw std::logic_error("Couldn't find cover");
+                        }
+                    }
+                }
                 for (int ci : coverIndices) {
                     candidates.push_back(indices[ci]);
                 }
             }
         }
-        sort(candidates.begin(), candidates.end());
+        std::sort(candidates.begin(), candidates.end());
         candidates.erase(unique(candidates.begin(), candidates.end()), candidates.end());
         return candidates;
     }
@@ -217,23 +274,27 @@ namespace Casting
             const auto actualNormal = bigFaces[candidateIndex].GetNormal();
             matrix.clear();
             indices.clear();
-            bool exists = true;
+            bool blockingFace = false;
             for (int j = 0; j < (int)bigFaces.size(); ++j) {
                 if (j != candidateIndex) {
                     const auto bigFaceNormal = bigFaces[j].GetNormal();
                     const double cos = Dot(bigFaceNormal, actualNormal);
                     if (cos > kSinSmallestHalfAngle) {
-                        exists = false;
+                        blockingFace = true;
                         break;
                     }
                 }
             }
-            if (exists) {
-                const auto rotation = ProjectFacesOnUpperHemisphere(actualNormal, bigFaces, candidateIndex, matrix, indices);
+            if (!blockingFace) {
+                // We use negated face normal because we want only downward-looking faces only, we have just checked that there are no upward-looking
+                const auto rotation = ProjectFacesOnUpperHemisphere(-actualNormal, bigFaces, candidateIndex, matrix, indices);
+                auto l = count_if(bigFaces.cbegin(), bigFaces.cend(), [n = -actualNormal](const SDK::Plane<double>& face) { return (face.GetNormal() - n).LenSq() <= kMaxDiffSq; });
+                (void)l;
+                assert(matrix.size() == bigFaces.size() - 1 - count_if(bigFaces.cbegin(), bigFaces.cend(), [n = -actualNormal](const SDK::Plane<double>& face) { return (face.GetNormal() - n).LenSq() <= kMaxDiffSq; }));
                 SDK::Point2<double> any{ 1.,1. };
                 const auto kBounds = make_pair(-kBound, kBound);
-                const auto pullout1 = Optimization::solveMax(any, matrix, kBounds, kBounds, kMaxDiff);
-                const auto pullout2 = Optimization::solveMax(-any, matrix, kBounds, kBounds, kMaxDiff);
+                const auto pullout1 = Optimization::LpSolver(any, matrix, kBounds, kBounds, kMaxDiff).solveMax();
+                const auto pullout2 = Optimization::LpSolver(-any, matrix, kBounds, kBounds, kMaxDiff).solveMax();
                 assert(pullout1.has_value() == pullout2.has_value());
                 if (pullout1.has_value()) {
                     const auto p = (pullout1.value().point + pullout2.value().point) / 2;

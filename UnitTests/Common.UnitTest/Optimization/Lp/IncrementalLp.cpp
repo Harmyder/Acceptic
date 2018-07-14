@@ -38,7 +38,7 @@ namespace CommonTest
             matrix.emplace_back(Line<double>(1.,  0.,  1.));
             matrix.emplace_back(Line<double>(0.,  1.,  -1.));
             matrix.emplace_back(Line<double>(0., -1.,  -1.));
-            const auto best = solveMax(Point2<double>(1., 0.), matrix, bounds, boundsDoubled, maxDiff);
+            const auto best = LpSolver(Point2<double>(1., 0.), matrix, bounds, boundsDoubled, maxDiff).solveMax();
             Assert::IsTrue(best.has_value());
             Assert::IsTrue(AlmostEqualRelativeAndAbs(best.value().point.x, bounds.second, maxDiff));
         }
@@ -47,7 +47,7 @@ namespace CommonTest
             vector<HalfPlane<double>> matrix;
             matrix.emplace_back(Line<double>(-1.,  0., 1));
             matrix.emplace_back(Line<double>( 1.,  0., 1));
-            const auto best = solveMax(Point2<double>(1., 0.), matrix, bounds, bounds, maxDiff);
+            const auto best = LpSolver(Point2<double>(1., 0.), matrix, bounds, bounds, maxDiff).solveMax();
             Assert::IsFalse(best.has_value());
         }
             
@@ -57,7 +57,7 @@ namespace CommonTest
             matrix.emplace_back(Line<double>( 1.,  0., -1));
             matrix.emplace_back(Line<double>( 0., -1., -1));
             matrix.emplace_back(Line<double>( 0.,  1., -1));
-            const auto best = solveMax(Point2<double>(1., 0.), matrix, bounds, bounds, maxDiff);
+            const auto best = LpSolver(Point2<double>(1., 0.), matrix, bounds, bounds, maxDiff).solveMax();
             Assert::IsTrue(best.has_value());
             Assert::IsTrue(AlmostEqualRelativeAndAbs(best.value().point.x, 1., maxDiff));
         }

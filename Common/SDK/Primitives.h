@@ -37,9 +37,9 @@ namespace Common {
             return { x,y };
         }
 
-        template <class T>
-        bool IsPlaneCover(const HalfPlane<T>& a, const HalfPlane<T>& b, const HalfPlane<T>& c, T maxDiff) {
-            const auto isParallelCover = [](const Point2<T>& p, const HalfPlane<T>& hp1, const HalfPlane<T>& hp2) {
+        namespace detail {
+            template <class T>
+            bool isParallelCover(const Point2<T>& p, const HalfPlane<T>& hp1, const HalfPlane<T>& hp2) {
                 if (p.IsInfinite()) {
                     const T d = Dot(hp1.GetNormal(), hp2.GetNormal());
                     const bool codirected = d > 0;
@@ -49,17 +49,31 @@ namespace Common {
                 }
                 return false;
             };
+        }
+
+        template <class T>
+        bool IsPlaneCover(const HalfPlane<T>& a, const HalfPlane<T>& b, T maxDiff) {
+            const auto gamma = Intersection(a.boundary, b.boundary, maxDiff);
+            return detail::isParallelCover(gamma, a, b);
+        }
+
+        template <class T>
+        bool IsPlaneCover(const HalfPlane<T>& a, const HalfPlane<T>& b, const HalfPlane<T>& c, T maxDiff) {
             const auto gamma  = Intersection(a.boundary, b.boundary, maxDiff);
-            if (isParallelCover(gamma, a, b)) {
+            if (detail::isParallelCover(gamma, a, b)) {
                 return true;
             }
             const auto alpha = Intersection(b.boundary, c.boundary, maxDiff);
-            if (isParallelCover(alpha, b, c)) {
+            if (detail::isParallelCover(alpha, b, c)) {
                 return true;
             }
             const auto beta  = Intersection(c.boundary, a.boundary, maxDiff);
-            if (isParallelCover(beta, c, a)) {
+            if (detail::isParallelCover(beta, c, a)) {
                 return true;
+            }
+            if (alpha.IsInfinite() || beta.IsInfinite() || gamma.IsInfinite()) {
+                // If there are parallel lines which don't form a cover, there is no cover at all
+                return false;
             }
             const bool gammaOk = c.IsInside(gamma, maxDiff);
             const bool betaOk  = b.IsInside(beta, maxDiff);
