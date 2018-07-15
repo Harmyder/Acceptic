@@ -33,6 +33,63 @@ namespace
         const auto plane = PlaneFrom2VectorsAndPoint(vB - vA, vC - vB, vA);
         return plane;
     }
+
+    template <class It>
+    std::pair<int, int> FindTwoMoreForCover(const SDK::HalfPlane<double>& hp, It hpsBegin, It hpsEnd) {
+        // Rotate normal 90 degrees CCW to get a separator. Halfplane lies to the right of separator.
+        const SDK::Point2<double> separator(SDK::Normalize(SDK::Point2<double>(-hp.GetNormal().y, hp.GetNormal().x), kMaxDiff));
+        //            2|1/
+        //         <---|/--->        Oblique line AB represents given halfplane with separator directed upwarrd to the right
+        //            2B2            Vertical line is against, horizontal is along. One can see it using dot-product of plane normals with the separator vector.
+        //           2/|2          
+        // ^        2/3|2            In case we can find such a setup, we have a coverage.
+        // |       2/33|2            Observer that dot(AB, 'separator') must be greater than zero.
+        // |2222222/333|2          
+        //-|------A----|----         Starting position of A should be -separator * infinity
+        // 111111/22222|1
+        const double kInfty = 1.0001 * Casting::kBound;
+        SDK::Point2<double> bestAgainst(SDK::Infinitize(-separator.x, kInfty), SDK::Infinitize(-separator.y, kInfty));
+        SDK::Point2<double> bestAlong(-bestAgainst);
+        int bestSecondHalfPlaneAlong = Casting::kNoIndex;
+        int bestSecondHalfPlaneAgainst = Casting::kNoIndex;
+        int i = 0;
+        for (It it = hpsBegin; it < hpsEnd; ++it, ++i) {
+            const SDK::HalfPlane<double>& testHp = *it;
+            assert(!testHp.IsInside(SDK::Point2<double>(0., 0.), kMaxDiff));
+            const double d = Dot(testHp.GetNormal(), separator);
+            const bool isParallel = SDK::AlmostEqualToZero(d, kMaxDiff);
+            if (isParallel) {
+                continue;
+            }
+            const auto p = Intersection(hp.boundary, testHp.boundary, kMaxDiff);
+            bool isAlong = d > 0;
+            if (isAlong) {
+                const auto increment = p - bestAlong;
+                if (Dot(increment, separator) < 0) {
+                    bestAlong = p;
+                    bestSecondHalfPlaneAlong = i;
+                }
+            }
+            else {
+                const auto increment = p - bestAgainst;
+                if (Dot(increment, separator) > 0) {
+                    bestAgainst = p;
+                    bestSecondHalfPlaneAgainst = i;
+                }
+            }
+        }
+        const bool againstInfty = bestAgainst.x == kInfty || bestAgainst.y == kInfty;
+        const bool alongInfty = bestAlong.x == kInfty || bestAlong.y == kInfty;
+        if (!againstInfty && !alongInfty) {
+            const auto AB = bestAgainst - bestAlong;
+            const double d = Dot(AB, separator);
+            if (d > -kMaxDiff) {
+                return { bestSecondHalfPlaneAlong, bestSecondHalfPlaneAgainst };
+            }
+        }
+
+        return { Casting::kNoIndex, Casting::kNoIndex };
+    }
 }
 
 namespace Casting
@@ -78,6 +135,11 @@ namespace Casting
         return bigFaces;
     }
 
+    // --------------1-------------  projection plane (z = 1)
+    //               |  
+    //               | / - vector to be projected
+    //               |/
+    // --------------0-------------
     SDK::HalfPlane<double> ProjectHemisphereOnZUnitPlane(SDK::Point3<double> hemisphereDirection) {
         const auto inplaneNormal = SDK::Point2<double>(hemisphereDirection.x, hemisphereDirection.y);
         const double distanceToOrigin = hemisphereDirection.z / inplaneNormal.Len();
@@ -160,18 +222,17 @@ namespace Casting
         return rotation;
     }
 
-    vector<int> FindS2Coverage(const vector<SDK::Plane<double>>& bigFaces) {
+    vector<int> FindS2Coverage(const vector<SDK::Plane<double>>& bigFaces, const SDK::Point3<double>* beginHemisphere, const SDK::Point3<double>* endHemisphere) {
         vector<int> candidates;
         vector<SDK::HalfPlane<double>> matrix;
-        vector<int> indices;
-        for (int i = 0; i < Casting::kCoverHemispheresCount; ++i) {
+        vector<int> bigFacesInd;
+        for (const SDK::Point3<double>* actualNormal = beginHemisphere; actualNormal < endHemisphere; ++actualNormal) {
             matrix.clear();
-            indices.clear();
-            const auto actualNormal = Casting::hemisphereCoverForSphere[i];
+            bigFacesInd.clear();
             bool singleElementCoverage = false;
             for (int j = 0; j < (int)bigFaces.size(); ++j) {
                 const auto bigFaceNormal = bigFaces[j].GetNormal();
-                if (IsTheSameFaceNormal(bigFaceNormal, actualNormal)) {
+                if (IsTheSameFaceNormal(bigFaceNormal, *actualNormal)) {
                     if (singleElementCoverage) {
                         // We have at least two big faces with the same normal as up direction, so extracting is impossible
                         candidates.pop_back();
@@ -184,7 +245,7 @@ namespace Casting
                 }
             }
             if (!singleElementCoverage) {
-                ProjectFacesOnUpperHemisphere(actualNormal, bigFaces, -1, matrix, indices);
+                ProjectFacesOnUpperHemisphere(*actualNormal, bigFaces, -1, matrix, bigFacesInd);
 
                 //DebugPrintf("actualNomral [%f %f %f]\n", actualNormal.x, actualNormal.y, actualNormal.z);
                 //for (int k : indices) {
@@ -199,8 +260,15 @@ namespace Casting
                     coverIndices.size() == 3 && !SDK::IsPlaneCover(matrix[coverIndices[0]], matrix[coverIndices[1]], matrix[coverIndices[2]], kMaxDiff);
                 const bool twoMissed = coverIndices.size() == 1;
                 if (oneMissed || twoMissed) {
-                    const auto hp = matrix[coverIndices[0]];
-                    ProjectFacesOnUpperHemisphere(-actualNormal, bigFaces, -1, matrix, indices);
+                    vector<SDK::HalfPlane<double>> coverHalfplanes;
+                    std::transform(coverIndices.cbegin(), coverIndices.cend(), back_inserter(coverHalfplanes), [&matrix](int i) { return matrix[i]; });
+                    std::transform(coverIndices.cbegin(), coverIndices.cend(), coverIndices.begin(), [&bigFacesInd](int i) { return bigFacesInd[i]; });
+                    matrix.clear();
+                    bigFacesInd.clear();
+                    ProjectFacesOnUpperHemisphere(-*actualNormal, bigFaces, -1, matrix, bigFacesInd);
+                    for (auto& hp : matrix) {
+                        hp.flip();
+                    }
                     if (twoMissed) {
                         // We can take advantage of the fact that all down-looking faces once projected become halfplanes which don't contain origin
                         //  222\1111111111/222
@@ -210,43 +278,46 @@ namespace Casting
                         //  222222/3333\222222
                         //  ----*--------*----         -- the plane we have
                         //  11/222222222222\11
-                        const int meIndex = coverIndices[0];
                         for (int additional = 0; additional < (int)matrix.size(); ++additional) {
-                            if (additional != meIndex && SDK::IsPlaneCover(matrix[indices[meIndex]], matrix[indices[additional]], kMaxDiff)) {
-                                coverIndices.push_back(additional);
+                            if (SDK::IsPlaneCover(coverHalfplanes[0], matrix[additional], kMaxDiff)) {
+                                coverIndices.push_back(bigFacesInd[additional]);
                                 break;
                             }
                         }
                         const bool oneIsEnough = coverIndices.size() == 2;
                         if (!oneIsEnough) {
-                            
+                            const auto twoMore = FindTwoMoreForCover(coverHalfplanes[0], matrix.cbegin(), matrix.cend());
+                            if (twoMore.first == Casting::kNoIndex || twoMore.second == Casting::kNoIndex) {
+                                throw std::logic_error("Can't find two additional halfplanes for cover among down-looking faces");
+                            }
+                            coverIndices.push_back(bigFacesInd[twoMore.first]);
+                            coverIndices.push_back(bigFacesInd[twoMore.second]);
+                            assert(SDK::IsPlaneCover(coverHalfplanes[0], matrix[twoMore.first], matrix[twoMore.second], kMaxDiff));
                         }
                     }
                     else {
                         assert(oneMissed);
-                        auto checkPair = [&matrix = as_const(matrix), &indices = as_const(indices), &coverIndices](int meIndex0, int meIndex1) {
+                        auto checkPair = [&matrix = as_const(matrix), &bigFacesInd = as_const(bigFacesInd), &coverIndices](const SDK::HalfPlane<double>& hp1, const SDK::HalfPlane<double>& hp2) {
                             for (int additional = 0; additional < (int)matrix.size(); ++additional) {
-                                if (additional != meIndex0 && additional != meIndex1) {
-                                    if (SDK::IsPlaneCover(matrix[indices[meIndex0]], matrix[indices[meIndex1]], matrix[indices[additional]], kMaxDiff)) {
-                                        coverIndices.push_back(additional);
-                                        return true;
-                                    }
+                                if (SDK::IsPlaneCover(hp1, hp2, matrix[additional], kMaxDiff)) {
+                                    coverIndices.push_back(bigFacesInd[additional]);
+                                    return true;
                                 }
                             }
                             return false;
                         };
                         if (coverIndices.size() == 2) {
-                            checkPair(coverIndices[0], coverIndices[1]);
+                            checkPair(coverHalfplanes[0], coverHalfplanes[1]);
                         }
                         else {
                             assert(coverIndices.size() == 3);
-                            if (checkPair(coverIndices[0], coverIndices[1])) {
+                            if (checkPair(coverHalfplanes[0], coverHalfplanes[1])) {
                                 coverIndices[2] = coverIndices[3];
                             }
-                            else if (checkPair(coverIndices[0], coverIndices[2])) {
+                            else if (checkPair(coverHalfplanes[0], coverHalfplanes[2])) {
                                 coverIndices[1] = coverIndices[3];
                             }
-                            else if (checkPair(coverIndices[1], coverIndices[2])) {
+                            else if (checkPair(coverHalfplanes[1], coverHalfplanes[2])) {
                                 coverIndices[0] = coverIndices[3];
                             }
                             coverIndices.pop_back();
@@ -257,7 +328,12 @@ namespace Casting
                     }
                 }
                 for (int ci : coverIndices) {
-                    candidates.push_back(indices[ci]);
+                    if (oneMissed || twoMissed) {
+                        candidates.push_back(ci);
+                    }
+                    else {
+                        candidates.push_back(bigFacesInd[ci]);
+                    }
                 }
             }
         }

@@ -18,7 +18,7 @@ namespace Casting
 {
     std::vector<Common::SDK::Plane<double>> CombineFaces(const Common::Dcel::Mesh<int>& m, std::vector<Common::SDK::Point3<double>> verticesObj);
 
-    const std::array<Common::SDK::Point3<double>, 4> hemisphereCoverForSphere = {
+    const std::array<Common::SDK::Point3<double>, 4> kHemisphereCoverForSphere = {
         Common::SDK::Normalize(Common::SDK::Point3<double>(1.,  .2,  0.), kMaxDiff),
         Common::SDK::Normalize(Common::SDK::Point3<double>(-1.,  .2,  0.), kMaxDiff),
         // small z-axis aligned cleft left uncovered toward negative y-axis 
@@ -40,8 +40,8 @@ namespace Casting
 
     const double kBound = 1. / std::tan(kSmallestAngle / 2) + 1.;
 
-    const int kCandidatesPerHemisphere = 4;
-    const int kCoverHemispheresCount = 4;
+    const int kNoIndex = -1;
+
     const Common::SDK::Point3<double> upperHemisphereDirection(0., 0., 1.);
 
     // Next two function are reverse of each over
@@ -60,6 +60,6 @@ namespace Casting
         std::vector<int>& indices
     );
 
-    std::vector<int> FindS2Coverage(const std::vector<Common::SDK::Plane<double>>& bigFaces);
+    std::vector<int> FindS2Coverage(const std::vector<Common::SDK::Plane<double>>& bigFaces, const Common::SDK::Point3<double>* beginHemisphere, const Common::SDK::Point3<double>* endHemisphere);
     std::vector<std::pair<int, Common::SDK::Point3<double>>> CheckCandidates(const std::vector<Common::SDK::Plane<double>>& bigFaces, const std::vector<int>& candidates);
 }

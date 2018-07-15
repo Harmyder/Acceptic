@@ -30,8 +30,11 @@ namespace Common {
                 }
                 return true;
             }
+        }
 
-
+        template <class T>
+        T InftyFromBounds(const std::pair<T, T>& xBounds, const std::pair<T, T>& yBounds) {
+            return 1.0001 * std::max(std::max(std::abs(xBounds.first), std::abs(xBounds.first)), std::max(std::abs(yBounds.first), std::abs(yBounds.first)));
         }
 
         template <class T>
@@ -55,7 +58,7 @@ namespace Common {
                 kMatrix(matrix),
                 _indices(matrix.size()),
                 kMaxDiff(maxDiff),
-                kInfty(1.0001 * std::max(std::max(std::abs(xBounds.first), std::abs(xBounds.first)), std::max(std::abs(yBounds.first), std::abs(yBounds.first))))
+                kInfty(InftyFromBounds(xBounds, yBounds))
             {
                 assert(matrix.size() > 0);
                 std::iota(_indices.begin(), _indices.end(), 0);
@@ -104,8 +107,8 @@ namespace Common {
                 const SDK::Point2<T> separator(SDK::Normalize(SDK::Point2<T>(-hp.GetNormal().y, hp.GetNormal().x), kMaxDiff));
                 SDK::Point2<T> bestAgainst(SDK::Infinitize(separator.x, kInfty), SDK::Infinitize(separator.y, kInfty));
                 SDK::Point2<T> bestAlong(-bestAgainst);
-                int bestSecondHalfPlaneAlong = std::numeric_limits<int>::min();
-                int bestSecondHalfPlaneAgainst = std::numeric_limits<int>::min();
+                int bestSecondHalfPlaneAlong = -1;
+                int bestSecondHalfPlaneAgainst = -1;
                 for (int j = 0; j < curr; ++j) {
                     const SDK::HalfPlane<T>& prev = matrixAndBoundaries(j);
                     const T d = Dot(prev.GetNormal(), separator);
@@ -135,41 +138,25 @@ namespace Common {
                         }
                     }
                 }
-                const bool bestAlongInf = bestAlong.IsInfinite();
-                const bool bestAgainstInf = bestAgainst.IsInfinite();
-                assert(!bestAlongInf || !bestAgainstInf);
                 SDK::Point2<T> candidateP(SDK::kNan);
                 T candidateV;
                 int candidateSecondHalfPlane;
-                if (!bestAlongInf && !bestAgainstInf) {
-                    const T cos = Dot(bestAgainst - bestAlong, separator);
-                    const bool isFeasible = cos > -std::sqrt(kMaxDiff);
-                    if (!isFeasible) {
-                        return false;
-                    }
-                    const T againstV = Dot(bestAgainst, kC);
-                    const T alongV = Dot(bestAlong, kC);
-                    if (alongV > againstV) {
-                        candidateV = alongV;
-                        candidateP = bestAlong;
-                        candidateSecondHalfPlane = bestSecondHalfPlaneAlong;
-                    }
-                    else {
-                        candidateV = againstV;
-                        candidateP = bestAgainst;
-                        candidateSecondHalfPlane = bestSecondHalfPlaneAgainst;
-                    }
+                const T cos = Dot(bestAgainst - bestAlong, separator);
+                const bool isFeasible = cos > -std::sqrt(kMaxDiff);
+                if (!isFeasible) {
+                    return false;
                 }
-                else if (bestAlong.IsInfinite()) {
-                    candidateV = Dot(kC, bestAgainst);
-                    candidateP = bestAgainst;
-                    candidateSecondHalfPlane = bestSecondHalfPlaneAgainst;
-                }
-                else {
-                    assert(bestAgainst.IsInfinite());
-                    candidateV = Dot(kC, bestAlong);
+                const T againstV = Dot(bestAgainst, kC);
+                const T alongV = Dot(bestAlong, kC);
+                if (alongV > againstV) {
+                    candidateV = alongV;
                     candidateP = bestAlong;
                     candidateSecondHalfPlane = bestSecondHalfPlaneAlong;
+                }
+                else {
+                    candidateV = againstV;
+                    candidateP = bestAgainst;
+                    candidateSecondHalfPlane = bestSecondHalfPlaneAgainst;
                 }
                 if (candidateV <= currV) {
                     currV = candidateV;

@@ -212,6 +212,18 @@ namespace Common {
         }
 
         template <class T>
+        Matrix<T, 3> RotationAroundAxis(const Point3<T> axis, const T angle, T maxDiff) {
+            assert(AlmostEqualRelativeAndAbs(axis.LenSq(), Normalize(axis, maxDiff).LenSq(), maxDiff * maxDiff));
+            const T sin = std::sin(angle);
+            const T cos = std::cos(angle);
+            Matrix<T, 3> kx = CreateCrossProdMatrix(Normalize(axis, maxDiff));
+            Matrix<T, 3> res(kIdentity);
+            res += kx * sin;
+            res += kx * kx * (1 - cos);
+            return res;
+        }
+
+        template <class T>
         Matrix<T, 3> RotationBetween(const Point3<T>& a, const Point3<T>& b, T maxDiff, T maxDiffSq) {
             assert(AlmostEqualRelativeAndAbs(a.LenSq(), Normalize(a, maxDiff).LenSq(), maxDiffSq));
             assert(AlmostEqualRelativeAndAbs(b.LenSq(), Normalize(b, maxDiff).LenSq(), maxDiffSq));
@@ -317,7 +329,8 @@ namespace Common {
         struct HyperPlane<T, 3> {
             // a*x + b*y + c*z = d
             HyperPlane(T a, T b, T c, T d) : a(a), b(b), c(c), d(d) {}
-            HyperPlane(Point3<T> p, T d) : HyperPlane(p.x, p.y, p.z, d) {}
+            HyperPlane(Point3<T> n, T d) : HyperPlane(n.x, n.y, n.z, d) {}
+            HyperPlane(Point3<T> n, Point3<T> p) : HyperPlane(n.x, n.y, n.z, Dot(n, p)) {}
 
             using value_type = T;
             union {
